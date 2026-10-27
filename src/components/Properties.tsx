@@ -146,6 +146,24 @@ export function Properties({ project, layer, onLayer, onOptions, onProject, onAc
           </div>
         )}
         {backSide && <p className="props-hint">背面：一般紙張純印刷（不含雷射、白墨）。上傳背面圖後拉滿整張卡即可。</p>}
+        {product.family === 'paper' && (
+          <>
+            <h4 className="props-sub">表面覆膜</h4>
+            <div className="seg" role="radiogroup" aria-label="表面覆膜">
+              <button className={(o.lamination ?? 'gloss') !== 'matte' ? 'active' : ''} onClick={() => onOptions({ lamination: 'gloss' })}>
+                亮膜
+              </button>
+              <button className={o.lamination === 'matte' ? 'active' : ''} onClick={() => onOptions({ lamination: 'matte' })}>
+                霧膜
+              </button>
+            </div>
+            <p className="props-hint">
+              {backSide
+                ? '背面可以另外選。亮膜有反光帶，霧膜則把閃光壓成柔和的霧面。'
+                : '亮膜會有一道清楚的反光帶掃過；霧膜沒有銳利高光，雷射和燙金的閃光會被壓柔。'}
+            </p>
+          </>
+        )}
         {!isAcrylic && !backSide && (
           <>
             <h4 className="props-sub">底材</h4>

@@ -5,6 +5,7 @@
  * - 彩虹雷射：依半向量在切線方向的投影模擬繞射，顏色隨光源與視角流動
  * - 亮片雷射：每個小格是一片隨機傾斜的亮片，對到光才閃
  * - 碎玻璃雷射：Voronoi 碎片，每片各自傾斜與色相
+ * - 表面覆膜：亮膜在最上層加一道清漆反光帶；霧膜提高粗糙度、壓低高光並加上輕微霧感
  */
 export const foilVertex = /* glsl */ `
 varying vec3 vPosW;
@@ -36,6 +37,7 @@ uniform float uAcrylic;
 uniform float uPaperGloss;
 uniform float uSubstrate;   // < 0 = 一般紙；否則為膜材編號（雷射卡底材）
 uniform float uInkClarity;  // 沒白墨處印刷的透光程度
+uniform float uLamination;  // -1 不套覆膜；0 亮膜；1 霧膜
 
 varying vec3 vPosW;
 varying vec3 vNormalW;
@@ -104,16 +106,28 @@ vec3 shadePaper(vec3 albedo, vec3 N, vec3 V, vec3 L) {
   return albedo * (0.5 + 0.62 * diff * uLightIntensity) + vec3(spec + rim) * uLightIntensity;
 }
 
+vec3 matteHaze(vec3 c) {
+  float lam = clamp(uLamination, 0.0, 1.0);
+  if (lam < 0.001) return c;
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 hazy = mix(c, vec3(lum * 0.94, lum * 0.95, lum * 0.98), 0.28 * lam);
+  // 壓低高光對比，顏色還在，尖銳閃光變成較寬的柔光
+  return mix(vec3(lum), hazy, mix(1.0, 0.72, lam));
+}
+
 vec3 shadeFilm(int kind, vec3 base, float rough, vec2 d, vec3 N, vec3 T, vec3 B, vec3 V, vec3 L) {
+  float lam = clamp(uLamination, 0.0, 1.0);
+  rough = clamp(mix(rough, min(0.95, rough + 0.5), lam), 0.0, 0.95);
+  float sparkGain = mix(1.0, 0.12, lam);
   vec3 H = normalize(L + V);
   // 燙金表面的微皺褶，讓高光不會像塑膠一樣均勻
   vec2 n2 = vec2(vnoise(d * 0.28), vnoise(d * 0.28 + 17.0)) - 0.5;
   n2 += (vec2(vnoise(d * 1.1 + 3.0), vnoise(d * 1.1 + 29.0)) - 0.5) * 0.35;
   vec3 Np = normalize(N + (T * n2.x + B * n2.y) * 0.09);
   if (kind == 0) {
-    return shadeMetal(base, rough, Np, V, L);
+    return matteHaze(shadeMetal(base, rough, Np, V, L));
   }
-  vec3 metal = shadeMetal(vec3(0.72, 0.74, 0.78), 0.22, Np, V, L);
+  vec3 metal = shadeMetal(vec3(0.72, 0.74, 0.78), mix(0.22, 0.8, lam), Np, V, L);
   float ndh = max(dot(Np, H), 0.0);
   float lobe = pow(ndh, 5.0);
   vec3 dir = normalize(T + B);
@@ -122,8 +136,8 @@ vec3 shadeFilm(int kind, vec3 base, float rough, vec2 d, vec3 N, vec3 T, vec3 B,
     // 彩虹雷射：繞射色帶
     float t = g * 2.6 + dot(V, T) * 0.7 + (d.x + d.y) * 0.011 + vnoise(d * 0.12) * 0.35;
     vec3 rainbow = spectrum(t);
-    float fine = 0.85 + 0.15 * sin((d.x - d.y) * 9.0 + g * 40.0);
-    return metal * 0.42 + rainbow * fine * (0.42 + 2.1 * lobe) * uLightIntensity + vec3(pow(ndh, 140.0)) * 1.6 * uLightIntensity;
+    float fine = mix(0.85 + 0.15 * sin((d.x - d.y) * 9.0 + g * 40.0), 1.0, lam);
+    return matteHaze(metal * 0.42 + rainbow * fine * (0.42 + 2.1 * lobe * mix(1.0, 0.35, lam)) * uLightIntensity + vec3(pow(ndh, 140.0)) * 1.6 * sparkGain * uLightIntensity);
   }
   if (kind == 2) {
     // 亮片雷射：兩種大小的亮片
@@ -140,9 +154,9 @@ vec3 shadeFilm(int kind, vec3 base, float rough, vec2 d, vec3 N, vec3 T, vec3 B,
       vec3 tn = normalize(N + (T * (rnd.x - 0.5) + B * (rnd.y - 0.5)) * 1.1);
       float spark = pow(max(dot(tn, H), 0.0), s == 0 ? 320.0 : 180.0) * flake;
       vec3 sc = mix(vec3(1.0), spectrum(r3 + g * 1.5), 0.75);
-      col += sc * spark * (s == 0 ? 14.0 : 8.0) * uLightIntensity;
+      col += sc * spark * (s == 0 ? 14.0 : 8.0) * sparkGain * uLightIntensity;
     }
-    return col;
+    return matteHaze(col);
   }
   // 碎玻璃雷射
   vec2 p = d / 3.2;
@@ -160,7 +174,7 @@ vec3 shadeFilm(int kind, vec3 base, float rough, vec2 d, vec3 N, vec3 T, vec3 B,
   vec3 tn = normalize(N + (T * (h.x - 0.5) + B * (h.y - 0.5)) * 0.55);
   float l2 = pow(max(dot(tn, H), 0.0), 36.0);
   vec3 c = spectrum(hash12(mc) + dot(H, T) * 1.6);
-  return metal * 0.42 + c * (0.18 + 2.4 * l2) * uLightIntensity + vec3(pow(max(dot(tn, H), 0.0), 400.0)) * 3.0 * uLightIntensity;
+  return matteHaze(metal * 0.42 + c * (0.18 + 2.4 * l2 * mix(1.0, 0.32, lam)) * uLightIntensity + vec3(pow(max(dot(tn, H), 0.0), 400.0)) * 3.0 * sparkGain * uLightIntensity);
 }
 
 void main() {
@@ -218,6 +232,25 @@ void main() {
     col = mix(col, fc, fo.a);
     alpha = max(alpha, fo.a);
   }
+
+  // 表面覆膜蓋在印刷、燙金與雷射之上。亮膜是一道會跟著傾斜掃過的清漆反光帶；霧膜沒有銳利高光。
+  if (uLamination > -0.5 && uLamination < 0.5 && uAcrylic < 0.5) {
+    vec3 Rv = reflect(-V, N);
+    float stripe = exp(-pow((Rv.x * 1.05 + Rv.y * 0.2) / 0.05, 2.0));
+    float along = smoothstep(0.0, 0.4, Rv.z);
+    float core = pow(max(dot(N, normalize(L + V)), 0.0), 480.0);
+    float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+    col += vec3(1.0, 0.985, 0.95) * (stripe * along * 2.05 + core * 2.2) * uLightIntensity;
+    col += vec3(0.2, 0.21, 0.24) * fres * uLightIntensity;
+  } else if (uLamination > 0.5 && uAcrylic < 0.5) {
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, vec3(lum * 0.96, lum * 0.97, lum), 0.18);
+    col = col / (1.0 + max(col - vec3(0.62), vec3(0.0)) * 1.05);
+    float diff = max(dot(N, L), 0.0);
+    float sheen = pow(max(dot(N, normalize(L + V)), 0.0), 4.5);
+    col = col * (0.92 + 0.16 * diff) + vec3(0.15, 0.155, 0.16) * sheen * uLightIntensity;
+  }
+
   if (alpha < 0.003) discard;
   gl_FragColor = vec4(col, alpha);
   #include <tonemapping_fragment>

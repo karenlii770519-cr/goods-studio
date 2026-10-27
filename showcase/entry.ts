@@ -9,7 +9,19 @@ import { FILMS } from '../src/lib/films';
 import { foilFragment, foilVertex } from '../src/three/foilShader';
 
 interface CardData { id: string; label: string; art: string; mask?: string }
-interface ShowcaseData { cards: CardData[]; back?: string; film?: string; inkClarity?: number; width?: number; height?: number; radius?: number; thickness?: number }
+interface ShowcaseData {
+  cards: CardData[];
+  back?: string;
+  film?: string;
+  inkClarity?: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  thickness?: number;
+  /** gloss 亮膜 / matte 霧膜 */
+  frontLam?: 'gloss' | 'matte';
+  backLam?: 'gloss' | 'matte';
+}
 declare const SHOWCASE: ShowcaseData;
 
 const D = SHOWCASE;
@@ -83,7 +95,11 @@ function tex(src: TexImageSource, srgb: boolean) {
   return t;
 }
 
-function decal(print: THREE.Texture, white: THREE.Texture, substrate: number, flipX: number) {
+function lamUniform(v: 'gloss' | 'matte' | undefined, fallback: 'gloss' | 'matte') {
+  return (v ?? fallback) === 'matte' ? 1 : 0;
+}
+
+function decal(print: THREE.Texture, white: THREE.Texture, substrate: number, flipX: number, lamination: number) {
   return new THREE.ShaderMaterial({
     vertexShader: foilVertex,
     fragmentShader: foilFragment,
@@ -99,10 +115,11 @@ function decal(print: THREE.Texture, white: THREE.Texture, substrate: number, fl
       uFilmKind: { value: FILMS.map((f) => f.kind) },
       uFilmRough: { value: FILMS.map((f) => f.roughness) },
       uAcrylic: { value: 0 },
-      uPaperGloss: { value: 0.1 },
+      uPaperGloss: { value: lamination > 0.5 ? 0 : 0.02 },
       uSubstrate: { value: substrate },
       uInkClarity: { value: D.inkClarity ?? 0.6 },
       uFlipX: { value: flipX },
+      uLamination: { value: lamination },
     },
   });
 }
@@ -146,11 +163,11 @@ async function build() {
 
     const body = new THREE.Mesh(bodyGeo, paperMat);
     body.position.z = -T / 2;
-    const front = new THREE.Mesh(frontGeo, decal(tex(art, true), mask ? tex(maskCanvas(mask), false) : empty, holoIdx, 0));
+    const front = new THREE.Mesh(frontGeo, decal(tex(art, true), mask ? tex(maskCanvas(mask), false) : empty, holoIdx, 0, lamUniform(D.frontLam, 'gloss')));
     front.position.z = T / 2 + 0.01;
     product.add(body, front);
     if (backTex) {
-      const back = new THREE.Mesh(backGeo, decal(backTex, empty, -1, W));
+      const back = new THREE.Mesh(backGeo, decal(backTex, empty, -1, W, lamUniform(D.backLam, 'matte')));
       back.position.z = -T / 2 - 0.01;
       product.add(back);
     }

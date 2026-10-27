@@ -12,6 +12,9 @@ export type FilmId =
 
 export type ShapeKind = 'rect' | 'ellipse' | 'star' | 'heart';
 
+/** 表面覆膜：亮膜有清漆反光帶，霧膜把高光壓柔 */
+export type Lamination = 'gloss' | 'matte';
+
 interface LayerBase {
   id: string;
   name: string;
@@ -77,6 +80,10 @@ export interface ProjectOptions {
   backBackground?: string | null;
   /** 背面的底材，目前固定為一般紙（null） */
   backSubstrate?: FilmId | null;
+  /** 正面表面覆膜。舊檔可能沒有，讀取時補成亮膜 */
+  lamination?: Lamination;
+  /** 背面表面覆膜。舊檔可能沒有，讀取時補成霧膜 */
+  backLamination?: Lamination;
 }
 
 export interface Project {

@@ -79,7 +79,7 @@ export function ExportDialog({ project, outline, onClose, onOpen3D }: Props) {
           {busy && <div className="muted">產生檔案中…</div>}
           {files?.map((f) => (
             <div key={f.name} className="export-item">
-              <div className="export-thumb">{previews[f.name] && <img src={previews[f.name]} alt="" />}</div>
+              <div className="export-thumb">{previews[f.name] && f.blob.type.startsWith('image/') && <img src={previews[f.name]} alt="" />}</div>
               <div className="export-meta">
                 <div>{f.label}</div>
                 <div className="muted xsmall">

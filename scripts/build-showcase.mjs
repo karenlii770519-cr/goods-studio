@@ -5,8 +5,10 @@
  *
  * 用法：
  *   node scripts/build-showcase.mjs --out 展示.html [--title 標題] [--subtitle 說明] [--back back.jpg] \
+ *     [--front-lam gloss|matte] [--back-lam gloss|matte] \
  *     --card "左上・紅|art.jpg|mask.png" --card "中上・白傘|art2.jpg|mask2.png" ...
  * mask 為黑白遮罩：黑 = 白墨（不透光），其餘透出彩色雷射。可省略。
+ * --front-lam 預設 gloss（亮膜），--back-lam 預設 matte（霧膜）。圖片只在產出的 HTML 裡，不會寫進 repo。
  */
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,8 +26,17 @@ for (let i = 0; i < args.length; i++) {
   else if (k === '--title') opt.title = v;
   else if (k === '--subtitle') opt.subtitle = v;
   else if (k === '--clarity') opt.inkClarity = Number(v);
+  else if (k === '--front-lam') opt.frontLam = v;
+  else if (k === '--back-lam') opt.backLam = v;
   else throw new Error('未知參數 ' + k);
 }
+const lam = (v, fallback) => {
+  if (v == null || v === '') return fallback;
+  if (v !== 'gloss' && v !== 'matte') throw new Error('覆膜只能是 gloss 或 matte，收到 ' + v);
+  return v;
+};
+opt.frontLam = lam(opt.frontLam, 'gloss');
+opt.backLam = lam(opt.backLam, 'matte');
 if (!opt.out || !opt.cards.length) throw new Error('需要 --out 與至少一個 --card');
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
@@ -39,6 +50,8 @@ const data = {
   back: opt.back ? dataUri(opt.back) : undefined,
   film: 'holo',
   inkClarity: opt.inkClarity ?? 0.6,
+  frontLam: opt.frontLam,
+  backLam: opt.backLam,
 };
 
 const res = await build({

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { downloadBlob, safeFileName } from '../lib/download';
 import { getFilm } from '../lib/films';
 import type { AcrylicOutline } from '../lib/outline';
-import type { FilmId, Project } from '../lib/types';
+import { LAMINATION_LABEL, hasBackSide } from '../lib/project';
+import type { FilmId, Lamination, Project } from '../lib/types';
 import { ProductViewer, type LightState, type VideoMotion } from '../three/viewer';
 import { Icon } from './Icon';
 import { FilmPicker } from './Properties';
@@ -229,6 +230,13 @@ export function Preview3D({ project, outline, onFilm, onSubstrate, onClose }: Pr
             <Icon name="fit" size={16} /> 重設視角
           </button>
           <h4 className="props-sub">影片</h4>
+          {hasBackSide(project.productId) && (
+            <p className="muted xsmall">
+              表面覆膜：正面{LAMINATION_LABEL[(project.options.lamination === 'matte' ? 'matte' : 'gloss') as Lamination]}
+              、背面{LAMINATION_LABEL[(project.options.backLamination === 'gloss' ? 'gloss' : 'matte') as Lamination]}
+              。傾斜擺動、旋轉一圈都會照這個設定錄；轉到背面時用背面自己的覆膜。
+            </p>
+          )}
           <div className="seg">
             <button className={motion === 'tilt' ? 'active' : ''} onClick={() => setMotion('tilt')}>傾斜擺動</button>
             <button className={motion === 'spin' ? 'active' : ''} onClick={() => setMotion('spin')}>旋轉一圈</button>

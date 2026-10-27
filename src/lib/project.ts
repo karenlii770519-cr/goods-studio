@@ -1,7 +1,7 @@
 import { uid } from './id';
 import { defaultOptions, getProduct } from './products';
 import { measureText } from './render';
-import type { FilmId, ImageLayer, Layer, Process, ProductId, Project, ShapeKind, ShapeLayer, TextLayer } from './types';
+import type { FilmId, ImageLayer, Lamination, Layer, Process, ProductId, Project, ProjectOptions, ShapeKind, ShapeLayer, TextLayer } from './types';
 
 export const DEFAULT_FONT = '"PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", system-ui, sans-serif';
 
@@ -114,6 +114,32 @@ export const PROCESS_HINT: Record<Process, string> = {
 
 export const PROCESS_ORDER: Process[] = ['foil', 'white', 'print', 'cut'];
 
+export const LAMINATION_LABEL: Record<Lamination, string> = {
+  gloss: '亮膜',
+  matte: '霧膜',
+};
+
+export function isLamination(v: unknown): v is Lamination {
+  return v === 'gloss' || v === 'matte';
+}
+
+/**
+ * 補上舊作品缺少的欄位。已存的覆膜選擇會保留；沒有的話正面亮膜、背面霧膜。
+ */
+export function migrateProject(raw: Project): Project {
+  const options = (raw.options ?? {}) as ProjectOptions;
+  const defaults = defaultOptions(raw.productId);
+  return {
+    ...raw,
+    options: {
+      ...defaults,
+      ...options,
+      lamination: isLamination(options.lamination) ? options.lamination : 'gloss',
+      backLamination: isLamination(options.backLamination) ? options.backLamination : 'matte',
+    },
+  };
+}
+
 /**
  * 正反面互換：把背面圖層／底色換到 layers／background 的位置。
  * 互換兩次會回到原樣，編輯器在「背面」模式時用它包住所有修改。
@@ -130,6 +156,8 @@ export function swapSides(p: Project): Project {
       backBackground: o.background,
       substrate: o.backSubstrate ?? null,
       backSubstrate: o.substrate ?? null,
+      lamination: o.backLamination,
+      backLamination: o.lamination,
     },
   };
 }

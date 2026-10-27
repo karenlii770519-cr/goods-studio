@@ -44,6 +44,8 @@ export function defaultOptions(id: ProductId): ProjectOptions {
     background: p.family === 'acrylic' ? null : '#ffffff',
     substrate: null,
     inkClarity: 0.6,
+    lamination: 'gloss',
+    backLamination: 'matte',
   };
 }
 

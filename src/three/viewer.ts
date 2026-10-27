@@ -7,7 +7,7 @@ import type { AcrylicOutline } from '../lib/outline';
 import { getProduct } from '../lib/products';
 import { swapSides } from '../lib/project';
 import { designRegion, renderFoilIdMap, renderLayers, shapePath } from '../lib/render';
-import type { Project } from '../lib/types';
+import type { Lamination, Project } from '../lib/types';
 import { foilFragment, foilVertex } from './foilShader';
 
 export type VideoMotion = 'spin' | 'tilt' | 'flip';
@@ -295,6 +295,8 @@ export class ProductViewer {
         uSubstrate: { value: -1 },
         uInkClarity: { value: 0.6 },
         uFlipX: { value: 0 },
+        // -1：壓克力／徽章維持原本的反光，不套卡片覆膜
+        uLamination: { value: -1 },
       },
     });
     this.materials.push(m);
@@ -347,6 +349,13 @@ export class ProductViewer {
     const decal = this.makeDecalMaterial(print, foil, white, region, product.family === 'acrylic');
     decal.uniforms.uSubstrate.value = o.substrate ? FILMS.findIndex((f) => f.id === o.substrate) : -1;
     decal.uniforms.uInkClarity.value = o.inkClarity ?? 0.6;
+    const lamOf = (v: Lamination | undefined, fallback: Lamination): Lamination => (v === 'gloss' || v === 'matte' ? v : fallback);
+    const applyLam = (m: THREE.ShaderMaterial, lam: Lamination) => {
+      const matte = lam === 'matte';
+      m.uniforms.uLamination.value = matte ? 1 : 0;
+      m.uniforms.uPaperGloss.value = matte ? 0 : 0.02;
+    };
+    if (product.family === 'paper') applyLam(decal, lamOf(o.lamination, 'gloss'));
 
     if (product.family === 'paper') {
       const shape = roundedRectShape(0, 0, W, H, product.cornerRadius);
@@ -362,6 +371,7 @@ export class ProductViewer {
         bgeo.translate(W, 0, 0);
         const backDecal = this.makeDecalMaterial(backTex.print, backTex.foil, backTex.white, region, false);
         backDecal.uniforms.uFlipX.value = W;
+        applyLam(backDecal, lamOf(o.backLamination, 'matte'));
         const back = new THREE.Mesh(bgeo, backDecal);
         back.position.z = -t / 2 - 0.01;
         this.product.add(back);

@@ -4,9 +4,9 @@ import { FILMS } from './films';
 import { pxPerMm, type Rect } from './geometry';
 import { polygonToSvgPath, type AcrylicOutline } from './outline';
 import { getProduct } from './products';
+import { LAMINATION_LABEL, hasBackSide, swapSides } from './project';
 import { createCanvas, designRegion, renderLayers, shapePath, toBlackWhiteMask } from './render';
-import type { Project } from './types';
-import { swapSides } from './project';
+import type { Lamination, Project } from './types';
 
 export interface ExportFile {
   name: string;
@@ -102,6 +102,24 @@ ${paths.join('\n')}
 </svg>`;
 }
 
+function lamLabel(v: Lamination | undefined, fallback: Lamination): string {
+  return LAMINATION_LABEL[v === 'gloss' || v === 'matte' ? v : fallback];
+}
+
+/** 完稿說明：列出檔案，並註明正反面表面覆膜。覆膜不改變印刷檔顏色。 */
+export function exportReadme(project: Project, files: { name: string; label: string }[]): string {
+  const lines = [
+    `作品：${project.name}`,
+    `品項：${getProduct(project.productId).name}（${project.width} × ${project.height} mm）`,
+    `表面覆膜：正面 ${lamLabel(project.options.lamination, 'gloss')}`,
+  ];
+  if (hasBackSide(project.productId)) lines.push(`表面覆膜：背面 ${lamLabel(project.options.backLamination, 'matte')}`);
+  lines.push('', '檔案清單：');
+  for (const f of files) lines.push(`- ${f.name}：${f.label}`);
+  lines.push('', '表面覆膜只影響 3D 預覽與影片的反光，不會改印刷檔的顏色。');
+  return lines.join('\n') + '\n';
+}
+
 export async function buildExport(project: Project, outline: AcrylicOutline | null, opt: ExportOptions): Promise<ExportFile[]> {
   const p = getProduct(project.productId);
   const region = regionFor(project, outline, opt.includeBleed);
@@ -162,6 +180,8 @@ export async function buildExport(project: Project, outline: AcrylicOutline | nu
   }
   await add(`${base}_刀模線.png`, '刀模線（黑線）', cutLineCanvas(project, outline, region, k));
   files.push({ name: `${base}_刀模線.svg`, label: '刀模線（向量 SVG，mm）', blob: new Blob([cutSvg(project, outline, region)], { type: 'image/svg+xml' }) });
+  const note = exportReadme(project, files.map((f) => ({ name: f.name, label: f.label })));
+  files.push({ name: `${base}_說明.txt`, label: '完稿說明（含表面覆膜）', blob: new Blob([note], { type: 'text/plain;charset=utf-8' }) });
   return files;
 }
 
