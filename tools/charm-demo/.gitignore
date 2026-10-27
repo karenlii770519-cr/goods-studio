@@ -1,0 +1,11 @@
+# 圖稿與建置結果可能含客戶圖，不要進版控
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.pdf
+*-3d.html
+frames/
+__pycache__/
+*.pyc
