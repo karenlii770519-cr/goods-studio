@@ -1,0 +1,43 @@
+/*
+ * 主題設定：品牌色、Logo 色、字型之後要換，只改這個檔案即可。
+ */
+:root {
+  /* 主色（之後換成品牌色） */
+  --accent: #5b6cff;
+  --accent-hover: #4a5af0;
+  --accent-soft: #eceeff;
+  --accent-ink: #ffffff;
+
+  /* 中性灰 */
+  --bg: #f4f5f7;
+  --bg-canvas: #e9ebef;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --line: #e3e6eb;
+  --line-strong: #cfd4dc;
+  --ink: #1f2430;
+  --ink-2: #4b5363;
+  --ink-3: #8a91a0;
+
+  /* 工藝分組色 */
+  --c-print: #4b5363;
+  --c-foil: #c08a1e;
+  --c-white: #6b8bb5;
+  --c-cut: #e0245e;
+  --danger: #e5484d;
+
+  /* 圓角與陰影 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --shadow-1: 0 1px 2px rgba(20, 24, 40, 0.06), 0 1px 1px rgba(20, 24, 40, 0.04);
+  --shadow-2: 0 6px 20px rgba(20, 24, 40, 0.08), 0 2px 6px rgba(20, 24, 40, 0.05);
+  --shadow-3: 0 18px 50px rgba(20, 24, 40, 0.18);
+
+  /* 字型：系統內建的圓潤無襯線字，不需載入外部字型 */
+  --font: ui-rounded, 'SF Pro Rounded', 'PingFang TC', 'Noto Sans TC', 'Noto Sans CJK TC', 'Microsoft JhengHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --topbar-h: 52px;
+  --side-w: 300px;
+}
