@@ -19,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -30,7 +29,7 @@ jobs:
         # 之後接自訂網域時，把 BASE_PATH 改成 "/"，並在 public/ 放 CNAME 檔
         run: npm run build
         env:
-          BASE_PATH: /goods-studio/
+          BASE_PATH: /${{ github.event.repository.name }}/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHistory } from '../lib/history';
 import type { AcrylicOutline } from '../lib/outline';
 import { getProduct } from '../lib/products';
-import { cloneLayer, fitText, makeImage, makeShape, makeText } from '../lib/project';
+import { cloneLayer, fitText, hasBackSide, makeImage, makeShape, makeText, swapSides } from '../lib/project';
 import { blackWhiteToAlpha, computeAcrylicOutline, loadImage } from '../lib/render';
 import { navigate } from '../lib/router';
 import { loadProject, saveProject } from '../lib/storage';
@@ -54,7 +54,10 @@ function useIsMobile() {
 export default function Editor({ projectId }: { projectId: string }) {
   const isMobile = useIsMobile();
   const hist = useHistory<Project | null>(null);
-  const project = hist.present;
+  const doc = hist.present;
+  /** 卡片正反面：背面模式時，編輯器看到的是把背面換到前面的專案 */
+  const [side, setSide] = useState<'front' | 'back'>('front');
+  const project = useMemo(() => (doc && side === 'back' ? swapSides(doc) : doc), [doc, side]);
   const [missing, setMissing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'idle'>('idle');
@@ -82,43 +85,44 @@ export default function Editor({ projectId }: { projectId: string }) {
   // 自動儲存
   const thumbTimer = useRef<number>();
   useEffect(() => {
-    if (!project || !loaded.current) return;
+    if (!doc || !loaded.current) return;
     setSaveState('saving');
     const t = window.setTimeout(async () => {
-      await saveProject({ ...project, updatedAt: Date.now() });
+      await saveProject({ ...doc, updatedAt: Date.now() });
       setSaveState('saved');
       window.clearTimeout(thumbTimer.current);
       thumbTimer.current = window.setTimeout(async () => {
-        const thumbnail = await makeThumbnail(project).catch(() => undefined);
-        const latest = await loadProject(project.id);
+        const thumbnail = await makeThumbnail(doc).catch(() => undefined);
+        const latest = await loadProject(doc.id);
         if (latest && thumbnail) await saveProject({ ...latest, thumbnail });
       }, 1200);
     }, 450);
     return () => window.clearTimeout(t);
-  }, [project]);
+  }, [doc]);
 
   const product = project ? getProduct(project.productId) : null;
   const isAcrylic = product?.family === 'acrylic';
 
   // 壓克力外框（圖稿變動後重算）
   useEffect(() => {
-    if (!project || !isAcrylic) {
+    if (!doc || !isAcrylic) {
       setOutline(null);
       return;
     }
     let alive = true;
     const t = setTimeout(() => {
-      computeAcrylicOutline(project).then((o) => alive && setOutline(o));
+      computeAcrylicOutline(doc).then((o) => alive && setOutline(o));
     }, 120);
     return () => {
       alive = false;
       clearTimeout(t);
     };
-  }, [project, isAcrylic]);
+  }, [doc, isAcrylic]);
 
   const update = useCallback(
-    (fn: (p: Project) => Project, mergeKey?: string) => hist.set((p) => (p ? fn(p) : p), mergeKey),
-    [hist],
+    (fn: (p: Project) => Project, mergeKey?: string) =>
+      hist.set((p) => (p ? (side === 'back' ? swapSides(fn(swapSides(p))) : fn(p)) : p), mergeKey),
+    [hist, side],
   );
 
   const updateLayer = useCallback(
@@ -326,6 +330,7 @@ export default function Editor({ projectId }: { projectId: string }) {
       onProject={onProject}
       onAction={doAction}
       focusText={focusText}
+      backSide={side === 'back'}
     />
   );
 
@@ -338,6 +343,12 @@ export default function Editor({ projectId }: { projectId: string }) {
         <span className="top-sep" />
         <div className="title-wrap">
           <span className="product-tag">{product.name}</span>
+          {hasBackSide(project.productId) && (
+            <div className="seg side-toggle" role="group" aria-label="正反面">
+              <button className={side === 'front' ? 'active' : ''} onClick={() => { setSide('front'); setSelectedId(null); }}>正面</button>
+              <button className={side === 'back' ? 'active' : ''} onClick={() => { setSide('back'); setSelectedId(null); }}>背面</button>
+            </div>
+          )}
           <input className="title-input" value={project.name} onChange={(e) => onProject({ name: e.target.value }, 'name')} aria-label="作品名稱" />
         </div>
         <span className={`save-state ${saveState}`}>{saveState === 'saving' ? '儲存中…' : saveState === 'saved' ? '已自動儲存' : ''}</span>
@@ -457,11 +468,11 @@ export default function Editor({ projectId }: { projectId: string }) {
       </div>
 
       {show3D && (
-        <Preview3D project={project} outline={outline} onFilm={(id, film) => updateLayer(id, { film })} onSubstrate={(substrate) => onOptions({ substrate })} onClose={() => setShow3D(false)} />
+        <Preview3D project={doc!} outline={outline} onFilm={(id, film) => updateLayer(id, { film })} onSubstrate={(substrate) => onOptions({ substrate })} onClose={() => setShow3D(false)} />
       )}
       {showExport && (
         <ExportDialog
-          project={project}
+          project={doc!}
           outline={outline}
           onClose={() => setShowExport(false)}
           onOpen3D={() => {

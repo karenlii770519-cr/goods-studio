@@ -79,7 +79,7 @@ await page.locator('.modal .icon-btn').first().click();
 await page.getByRole('button', { name: '3D 預覽' }).click();
 await page.waitForFunction(() => !document.querySelector('.p3-loading'), null, { timeout: 30000 });
 await sleep(800);
-const [vd] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByRole('button', { name: /旋轉影片/ }).click()]);
+const [vd] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByRole('button', { name: /6 秒影片/ }).click()]);
 const vPath = `/tmp/${vd.suggestedFilename()}`;
 await vd.saveAs(vPath);
 ok(fs.statSync(vPath).size > 10000, `錄製影片（${vd.suggestedFilename()}，${fs.statSync(vPath).size} bytes）`);

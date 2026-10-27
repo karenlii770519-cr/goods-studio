@@ -3,7 +3,7 @@ import { downloadBlob, safeFileName } from '../lib/download';
 import { getFilm } from '../lib/films';
 import type { AcrylicOutline } from '../lib/outline';
 import type { FilmId, Project } from '../lib/types';
-import { ProductViewer, type LightState } from '../three/viewer';
+import { ProductViewer, type LightState, type VideoMotion } from '../three/viewer';
 import { Icon } from './Icon';
 import { FilmPicker } from './Properties';
 
@@ -27,6 +27,9 @@ export function Preview3D({ project, outline, onFilm, onSubstrate, onClose }: Pr
   const [rec, setRec] = useState<null | number>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [motion, setMotion] = useState<VideoMotion>('tilt');
+  const [portrait, setPortrait] = useState(true);
+  const [clean, setClean] = useState(true);
   const foils = project.layers.filter((l) => l.process === 'foil' && l.visible);
   const [filmTarget, setFilmTarget] = useState<'all' | string>('all');
   const hasGyro = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -112,7 +115,7 @@ export function Preview3D({ project, outline, onFilm, onSubstrate, onClose }: Pr
     setRec(secs);
     const iv = setInterval(() => setRec((r) => (r !== null && r > 1 ? r - 1 : r)), 1000);
     try {
-      const { blob, ext } = await v.record(secs);
+      const { blob, ext } = await v.record({ seconds: secs, motion, clean, width: 1080, height: portrait ? 1350 : 1080 });
       downloadBlob(blob, `${safeFileName(project.name)}-3D預覽.${ext}`);
     } catch (e) {
       setError((e as Error).message);
@@ -225,10 +228,22 @@ export function Preview3D({ project, outline, onFilm, onSubstrate, onClose }: Pr
           >
             <Icon name="fit" size={16} /> 重設視角
           </button>
+          <h4 className="props-sub">影片</h4>
+          <div className="seg">
+            <button className={motion === 'tilt' ? 'active' : ''} onClick={() => setMotion('tilt')}>傾斜擺動</button>
+            <button className={motion === 'spin' ? 'active' : ''} onClick={() => setMotion('spin')}>旋轉一圈</button>
+          </div>
+          <div className="seg">
+            <button className={portrait ? 'active' : ''} onClick={() => setPortrait(true)}>直式 1080×1350</button>
+            <button className={!portrait ? 'active' : ''} onClick={() => setPortrait(false)}>方形 1080×1080</button>
+          </div>
+          <label className="bar-toggle">
+            <input type="checkbox" checked={clean} onChange={(e) => setClean(e.target.checked)} /> 簡報模式（影片不出現光球）
+          </label>
           <button className="btn primary" onClick={record} disabled={rec !== null || !ready}>
-            <Icon name="video" size={16} /> {rec !== null ? `錄影中…${rec}s` : '匯出 6 秒旋轉影片'}
+            <Icon name="video" size={16} /> {rec !== null ? `錄影中…${rec}s` : '匯出 6 秒影片'}
           </button>
-          <p className="muted xsmall">影片為 1080×1080。瀏覽器支援時存成 MP4，否則為 WebM。</p>
+          <p className="muted xsmall">傾斜擺動是頭尾相接的循環影片，光源固定。瀏覽器支援時存成 MP4，否則為 WebM。</p>
         </section>
       </aside>
     </div>

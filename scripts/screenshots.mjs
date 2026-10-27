@@ -70,7 +70,7 @@ async function dragPad(page, u, v) {
   await page.screenshot({ path: `${OUT}/06-desktop-3d-holo-light-right.png` });
   // 旋轉影片（彩虹雷射）
   {
-    const [vd] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.getByRole('button', { name: /旋轉影片/ }).click()]);
+    const [vd] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.getByRole('button', { name: /6 秒影片/ }).click()]);
     const ext = vd.suggestedFilename().split('.').pop();
     await vd.saveAs(`${OUT}/goods-studio-3d-holo.${ext}`);
     await sleep(800);

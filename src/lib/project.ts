@@ -113,3 +113,28 @@ export const PROCESS_HINT: Record<Process, string> = {
 };
 
 export const PROCESS_ORDER: Process[] = ['foil', 'white', 'print', 'cut'];
+
+/**
+ * 正反面互換：把背面圖層／底色換到 layers／background 的位置。
+ * 互換兩次會回到原樣，編輯器在「背面」模式時用它包住所有修改。
+ */
+export function swapSides(p: Project): Project {
+  const o = p.options;
+  return {
+    ...p,
+    layers: p.backLayers ?? [],
+    backLayers: p.layers,
+    options: {
+      ...o,
+      background: o.backBackground !== undefined ? o.backBackground : '#ffffff',
+      backBackground: o.background,
+      substrate: o.backSubstrate ?? null,
+      backSubstrate: o.substrate ?? null,
+    },
+  };
+}
+
+/** 有背面的品項（紙卡類） */
+export function hasBackSide(productId: string): boolean {
+  return ['card', 'tradingcard', 'polaroid', 'postcard', 'bookmark', 'colorboard'].includes(productId);
+}

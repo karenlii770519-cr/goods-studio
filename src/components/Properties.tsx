@@ -89,9 +89,11 @@ interface Props {
   onProject: (patch: Partial<Project>, mergeKey?: string) => void;
   onAction: (a: 'up' | 'down' | 'duplicate' | 'delete' | 'center' | 'bw2alpha') => void;
   focusText: number;
+  /** 正在編輯卡片背面（純印刷，不提供雷射底材） */
+  backSide?: boolean;
 }
 
-export function Properties({ project, layer, onLayer, onOptions, onProject, onAction, focusText }: Props) {
+export function Properties({ project, layer, onLayer, onOptions, onProject, onAction, focusText, backSide }: Props) {
   const textRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (focusText && textRef.current) {
@@ -143,7 +145,8 @@ export function Properties({ project, layer, onLayer, onOptions, onProject, onAc
             </div>
           </div>
         )}
-        {!isAcrylic && (
+        {backSide && <p className="props-hint">背面：一般紙張純印刷（不含雷射、白墨）。上傳背面圖後拉滿整張卡即可。</p>}
+        {!isAcrylic && !backSide && (
           <>
             <h4 className="props-sub">底材</h4>
             <div className="seg">

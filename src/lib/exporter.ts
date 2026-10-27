@@ -6,6 +6,7 @@ import { polygonToSvgPath, type AcrylicOutline } from './outline';
 import { getProduct } from './products';
 import { createCanvas, designRegion, renderLayers, shapePath, toBlackWhiteMask } from './render';
 import type { Project } from './types';
+import { swapSides } from './project';
 
 export interface ExportFile {
   name: string;
@@ -124,6 +125,12 @@ export async function buildExport(project: Project, outline: AcrylicOutline | nu
     clipRect,
   });
   await add(`${base}_印刷.png`, '印刷層（透明 PNG）', print);
+
+  if (p.family === 'paper' && project.backLayers?.length) {
+    const bp = swapSides(project);
+    const back = await renderLayers(bp, { region, pxPerMm: k, processes: ['print'], mode: 'raw', background: bp.options.background, clip, clipRect });
+    await add(`${base}_背面印刷.png`, '背面印刷（純印刷，不含雷射／白墨）', back);
+  }
 
   const preview = await renderLayers(project, {
     region,

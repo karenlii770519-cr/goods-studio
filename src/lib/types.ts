@@ -73,6 +73,10 @@ export interface ProjectOptions {
   substrate?: FilmId | null;
   /** 沒有白墨的地方，印刷墨的透明程度（0 = 完全不透，1 = 很透） */
   inkClarity?: number;
+  /** 背面底色（卡片類）；undefined = 白 */
+  backBackground?: string | null;
+  /** 背面的底材，目前固定為一般紙（null） */
+  backSubstrate?: FilmId | null;
 }
 
 export interface Project {
@@ -84,6 +88,8 @@ export interface Project {
   height: number;
   options: ProjectOptions;
   layers: Layer[];
+  /** 背面圖層（卡片類，純印刷），沒有就是空白紙背 */
+  backLayers?: Layer[];
   createdAt: number;
   updatedAt: number;
   thumbnail?: string;

@@ -11,12 +11,13 @@ varying vec3 vPosW;
 varying vec3 vNormalW;
 varying vec3 vTangentW;
 varying vec2 vDesign;
+uniform float uFlipX; // > 0：背面，設計座標 x 以 uFlipX − x 左右翻轉
 void main() {
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vPosW = wp.xyz;
   vNormalW = normalize(mat3(modelMatrix) * normal);
   vTangentW = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
-  vDesign = vec2(position.x, -position.y);
+  vDesign = vec2(uFlipX > 0.0 ? uFlipX - position.x : position.x, -position.y);
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;

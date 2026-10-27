@@ -5,9 +5,23 @@ import { FILMS } from '../lib/films';
 import type { Rect } from '../lib/geometry';
 import type { AcrylicOutline } from '../lib/outline';
 import { getProduct } from '../lib/products';
+import { swapSides } from '../lib/project';
 import { designRegion, renderFoilIdMap, renderLayers, shapePath } from '../lib/render';
 import type { Project } from '../lib/types';
 import { foilFragment, foilVertex } from './foilShader';
+
+export type VideoMotion = 'spin' | 'tilt' | 'flip';
+
+export interface VideoOptions {
+  seconds: number;
+  width: number;
+  height: number;
+  motion: VideoMotion;
+  /** 簡報模式：不出現光球等介面 */
+  clean: boolean;
+  /** 產品佔畫面高度的比例 */
+  fill: number;
+}
 
 export interface LightState {
   az: number; // 方位角（度），0 = 正前方
@@ -85,7 +99,8 @@ export class ProductViewer {
   private dragging = false;
   private gyroTarget = { x: 0, y: 0 };
   private gyroOn = false;
-  private recording: { start: number; dur: number } | null = null;
+  private recording: { start: number; dur: number; motion: VideoMotion } | null = null;
+  private manual = false;
   autoRotate = false;
   onLightChange?: (l: LightState) => void;
   private ro: ResizeObserver;
@@ -279,6 +294,7 @@ export class ProductViewer {
         uPaperGloss: { value: 0.1 },
         uSubstrate: { value: -1 },
         uInkClarity: { value: 0.6 },
+        uFlipX: { value: 0 },
       },
     });
     this.materials.push(m);
@@ -299,6 +315,15 @@ export class ProductViewer {
     });
     const foil = await renderFoilIdMap(project, region, k);
     const white = await renderLayers(project, { region, pxPerMm: k, processes: ['white'], mode: 'raw' });
+    let backTex: { print: HTMLCanvasElement; foil: HTMLCanvasElement; white: HTMLCanvasElement } | null = null;
+    if (product.family === 'paper') {
+      const bp = swapSides(project);
+      backTex = {
+        print: await renderLayers(bp, { region, pxPerMm: k, processes: ['print'], mode: 'raw', background: bp.options.background }),
+        foil: await renderFoilIdMap(bp, region, k),
+        white: await renderLayers(bp, { region, pxPerMm: k, processes: ['white'], mode: 'raw' }),
+      };
+    }
     if (this.disposed) return;
 
     this.clearProduct();
@@ -330,6 +355,17 @@ export class ProductViewer {
       const front = new THREE.Mesh(new THREE.ShapeGeometry(shape, 12), decal);
       front.position.z = t / 2 + 0.01;
       this.product.add(body, front);
+      if (backTex) {
+        // 背面：幾何繞 Y 轉 180° 再平移回原位（法線朝後），shader 用 uFlipX 讓設計左右翻轉，從背後看才是正的
+        const bgeo = new THREE.ShapeGeometry(shape, 12);
+        bgeo.rotateY(Math.PI);
+        bgeo.translate(W, 0, 0);
+        const backDecal = this.makeDecalMaterial(backTex.print, backTex.foil, backTex.white, region, false);
+        backDecal.uniforms.uFlipX.value = W;
+        const back = new THREE.Mesh(bgeo, backDecal);
+        back.position.z = -t / 2 - 0.01;
+        this.product.add(back);
+      }
     } else if (product.family === 'badge') {
       const R = W / 2;
       const h = 2.6;
@@ -432,11 +468,11 @@ export class ProductViewer {
 
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
+    if (this.manual) return;
     const now = performance.now();
     if (this.recording) {
       const t = Math.min(1, (now - this.recording.start) / this.recording.dur);
-      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      this.outer.rotation.set(0.08 * Math.sin(t * Math.PI * 2), e * Math.PI * 2, 0);
+      this.applyMotion(this.recording.motion, t);
     } else {
       if (this.autoRotate) this.outer.rotation.y += 0.008;
       else if (this.gyroOn) {
@@ -448,45 +484,121 @@ export class ProductViewer {
     this.renderer.render(this.scene, this.camera);
   };
 
+  /** 影片動作。t = 0–1，頭尾相接可無縫循環 */
+  private applyMotion(motion: VideoMotion, t: number) {
+    if (motion === 'spin') {
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      this.outer.rotation.set(0.08 * Math.sin(t * Math.PI * 2), e * Math.PI * 2, 0);
+    } else if (motion === 'flip') {
+      // 正面停一下 → 慢慢翻到背面 → 停一下 → 翻回正面；停留時微微晃動讓雷射閃
+      const seg = (a: number, b: number) => {
+        const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
+        return u * u * (3 - 2 * u);
+      };
+      const turn = seg(0.14, 0.44) + seg(0.6, 0.9);
+      const wob = THREE.MathUtils.degToRad(12) * Math.sin(t * Math.PI * 4);
+      this.outer.rotation.set(THREE.MathUtils.degToRad(5) * Math.cos(t * Math.PI * 2), turn * Math.PI + wob, 0);
+    } else {
+      // 手持傾斜：左右 ±25°，上下約 ±6°（橢圓軌跡），光源固定
+      const a = t * Math.PI * 2;
+      this.outer.rotation.set(THREE.MathUtils.degToRad(6) * Math.cos(a), THREE.MathUtils.degToRad(25) * Math.sin(a), 0);
+    }
+  }
+
   resetRotation() {
     this.outer.rotation.set(0, 0, 0);
   }
 
-  /** 錄製旋轉影片 */
-  async record(seconds = 6, size = 1080): Promise<{ blob: Blob; ext: string }> {
+  /** 簡報模式：隱藏光球與地面陰影，畫面只剩產品 */
+  setPresentation(on: boolean) {
+    this.lightOrb.visible = !on;
+    this.shadow.visible = !on;
+  }
+
+  /** 影片構圖：正面鏡頭，產品高度約佔畫面 fill 比例 */
+  private frameFor(w: number, h: number, fill: number) {
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    const box = new THREE.Box3().setFromObject(this.product);
+    const sz = box.getSize(new THREE.Vector3());
+    const half = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const dH = sz.y / fill / (2 * Math.tan(half));
+    const dW = sz.x / fill / (2 * Math.tan(half) * this.camera.aspect);
+    const d = Math.max(dH, dW);
+    this.camera.position.set(0, 0, d);
+    this.camera.near = d / 50;
+    this.camera.far = d * 20;
+    this.camera.updateProjectionMatrix();
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+  }
+
+  private restoreView(prevPR: number, cam: THREE.Vector3) {
+    this.outer.rotation.set(0, 0, 0);
+    this.renderer.setPixelRatio(prevPR);
+    this.renderer.domElement.style.objectFit = '';
+    this.camera.position.copy(cam);
+    this.resize();
+    this.controls.update();
+  }
+
+  /** 錄製影片（MediaRecorder，即時錄） */
+  async record(opts: Partial<VideoOptions> = {}): Promise<{ blob: Blob; ext: string }> {
+    const o: VideoOptions = { seconds: 6, width: 1080, height: 1080, motion: 'spin', clean: true, fill: 0.8, ...opts };
     const canvas = this.renderer.domElement;
     const types = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
     const mime = types.find((t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t));
     if (!mime) throw new Error('這個瀏覽器不支援錄影（MediaRecorder）');
     const prevPR = this.renderer.getPixelRatio();
+    const prevCam = this.camera.position.clone();
     const prevAuto = this.autoRotate;
     this.autoRotate = false;
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(size, size, false);
-    this.camera.aspect = 1;
-    this.camera.updateProjectionMatrix();
+    if (o.clean) this.setPresentation(true);
+    this.frameFor(o.width, o.height, o.fill);
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.objectFit = 'contain';
     const stream = canvas.captureStream(30);
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const done = new Promise<void>((r) => (rec.onstop = () => r()));
-    this.outer.rotation.set(0, 0, 0);
+    this.applyMotion(o.motion, 0);
     rec.start(250);
-    this.recording = { start: performance.now(), dur: seconds * 1000 };
-    await new Promise((r) => setTimeout(r, seconds * 1000 + 150));
+    this.recording = { start: performance.now(), dur: o.seconds * 1000, motion: o.motion };
+    await new Promise((r) => setTimeout(r, o.seconds * 1000 + 150));
     rec.stop();
     await done;
     this.recording = null;
-    this.outer.rotation.set(0, 0, 0);
+    this.setPresentation(false);
     this.autoRotate = prevAuto;
-    this.renderer.setPixelRatio(prevPR);
-    canvas.style.objectFit = '';
-    this.resize();
+    this.restoreView(prevPR, prevCam);
     const type = mime.split(';')[0];
     return { blob: new Blob(chunks, { type }), ext: type === 'video/mp4' ? 'mp4' : 'webm' };
+  }
+
+  /**
+   * 逐格輸出（離線、時間精準）：回傳每一格的 JPEG data URL，可交給 ffmpeg 編碼。
+   * 供自動化腳本使用。
+   */
+  async renderFrames(opts: Partial<VideoOptions> & { fps?: number; quality?: number } = {}, onFrame?: (i: number, url: string) => Promise<void> | void) {
+    const o = { seconds: 6, width: 1080, height: 1350, motion: 'tilt' as VideoMotion, clean: true, fill: 0.8, fps: 30, quality: 0.95, ...opts };
+    const prevPR = this.renderer.getPixelRatio();
+    const prevCam = this.camera.position.clone();
+    this.manual = true;
+    if (o.clean) this.setPresentation(true);
+    this.frameFor(o.width, o.height, o.fill);
+    const n = Math.round(o.seconds * o.fps);
+    for (let i = 0; i < n; i++) {
+      this.applyMotion(o.motion, i / n);
+      this.renderer.render(this.scene, this.camera);
+      await onFrame?.(i, this.renderer.domElement.toDataURL('image/jpeg', o.quality));
+    }
+    this.manual = false;
+    this.setPresentation(false);
+    this.restoreView(prevPR, prevCam);
+    return n;
   }
 
   snapshot(): string {
